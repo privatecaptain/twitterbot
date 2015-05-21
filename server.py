@@ -6,33 +6,9 @@ import tweepy
 
 conn = sqlite3.connect("twitter_data.db")
 
-
-
-callback_url = "http://127.0.0.1:8888/addfinal"
-
 consumer_key = "4kTL89hW5YqX4GPUUpzJ6lYbF"
 consumer_secret = "uEAmYCALLO5CSKlm0Yql39RTeF8PeRByYt3G8kASM8JjVRzrS1"
 
-access_token = "3024584890-Q5ioenppb3YkulE1Tl4cqdhD4l4B1uEv8KdlBsL"
-access_token_secret = "AKY6dEaAZYgwx91Op4lZor4kjQBVYB5j8VfMsuSpq99pE"
-
-
-
-# api = tweepy.API(auth)
-temp = {}
-
-def generate_tokens():
-	auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
-	try:
-		redirect_url = auth.get_authorization_url()
-	except tweepy.TweepError,e:
-		print e
-	# with conn:
-	# 	t = (auth.request_token,)
-	# 	print t
-	# 	cur = conn.cursor()
-	# 	cur.execute("INSERT INTO ACCOUNTS(request_token) VALUES(?);",t)
-	return (redirect_url,auth.request_token)
 
 
 def authenticate(access_token,access_token_secret):
@@ -41,7 +17,18 @@ def authenticate(access_token,access_token_secret):
 	return tweepy.API(auth)
 
 
-def adduser(screen_name):
+def generate_tokens():
+	auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
+	try:
+		redirect_url = auth.get_authorization_url()
+	except tweepy.TweepError,e:
+		print e
+	return (redirect_url,auth.request_token)
+
+
+
+
+def adduser(screen_name,api):
 	user = None
 	try:
 		user =  api.get_user(screen_name)
@@ -79,8 +66,16 @@ class MainHandler(tornado.web.RequestHandler):
 class AddUser(tornado.web.RequestHandler):
 	
 	def get(self):
+		try:
+			with conn:
+				cur = conn.cursor()
+				cur.execute("SELECT access_token,secret FROM ACCOUNTS")
+				row = cur.fetchone()
+		except:
+			self.write("No Account Added :(")
+		api = authenticate(row[0],row[1])
 		user_name = self.get_query_argument('user_name')
-		self.write(adduser(user_name))
+		self.write(adduser(user_name,api))
 		self.write(''' <a href="/">Back</a>''')
 
 
@@ -89,7 +84,8 @@ class AddAccount(tornado.web.RequestHandler):
 
 	def get(self):
 		t = generate_tokens()
-		self.set_cookie('request_token',str(t[1]))
+		self.set_cookie('oauth_token',t[1]['oauth_token'])
+		self.set_cookie('oauth_token_secret',t[1]['oauth_token_secret'])
 		self.redirect(t[0])
 
 class AccountFinal(tornado.web.RequestHandler):
@@ -103,7 +99,11 @@ class AccountFinal(tornado.web.RequestHandler):
 			# 	lid = cur.lastrowid
 			# 	cur.execute("SELECT request_token FROM ACCOUNTS WHERE id=?",lid)
 			# 	row = cur.fetchone()
-			auth.request_token = dict(self.get_cookie('request_token'))
+			rt = {}
+			rt['oauth_token'] = self.get_cookie('oauth_token')
+			rt['oauth_token_secret'] = self.get_cookie('oauth_token_secret')
+			rt['oauth_callback_confirmed'] = 'true'
+			auth.request_token = rt
 			print auth.request_token
 
 			try:
@@ -112,9 +112,8 @@ class AccountFinal(tornado.web.RequestHandler):
 				name = api.me().name
 				with conn:
 					cur = conn.cursor()
-					lid = cur.lastrowid
-					t = (name, auth.access_token,auth.access_token_secret,lid)
-					cur.execute("UPDATE ACCOUNTS SET Name=?, access_token=? , secret=? WHERE id=?",t)
+					t = (name, auth.access_token,auth.access_token_secret)
+					cur.execute("INSERT INTO ACCOUNTS(Name, access_token, secret) VALUES(?,?,?)",t)
 				self.write("Account Created")
 				self.write(''' <a href="/">Back</a>''')
 			except tweepy.TweepError,e:

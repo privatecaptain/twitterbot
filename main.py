@@ -9,15 +9,17 @@ conn = sqlite3.connect("twitter_data.db")
 consumer_key = "4kTL89hW5YqX4GPUUpzJ6lYbF"
 consumer_secret = "uEAmYCALLO5CSKlm0Yql39RTeF8PeRByYt3G8kASM8JjVRzrS1"
 
-access_token = "3024584890-Q5ioenppb3YkulE1Tl4cqdhD4l4B1uEv8KdlBsL"
-access_token_secret = "AKY6dEaAZYgwx91Op4lZor4kjQBVYB5j8VfMsuSpq99pE"
 
-auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
-auth.set_access_token(access_token, access_token_secret)
+def authenticate(access_token,access_token_secret):
+	try:
+		auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
+		auth.set_access_token(access_token,access_token_secret)
+		return tweepy.API(auth)
+	except:
+		return None
 
-api = tweepy.API(auth)
 
-def follow_back():
+def follow_back(api):
 	for follower in tweepy.Cursor(api.followers).items():
 		follower.follow()
 		print "Followed {0}".format(follower.name)
@@ -32,7 +34,7 @@ def retrieve_users():
 	return rows
 
 
-def retweet(user_tup):
+def retweet(user_tup,api):
 	user_name = user_tup[0]
 	latest_tweet = user_tup[1]
 	user = api.get_user(user_name)
@@ -50,11 +52,20 @@ def retweet(user_tup):
 		except:
 			print "RT Failed :("
 
+def getapis():
+	with conn:
+		cur = conn.cursor()
+		cur.execute("SELECT access_token,secret FROM ACCOUNTS")
+		rows = cur.fetchall()
+	apis = []
+	for i in rows:
+		apis.append(authenticate(i[0],i[1]))
+	return apis
 
 
-while True:
+def main_procedure(api):
 	try:
-		follow_back()
+		follow_back(api)
 	except 	Exception,e:
 		print e
 	try:
@@ -64,9 +75,14 @@ while True:
 	if users:
 		for i in users:
 			try:
-				retweet(i)
+				retweet(i,api)
 			except Exception,e:
 				print e
+
+while True:
+	apis = getapis()
+	for api in apis:
+		main_procedure(api)
 	print "Now Sleeping...."
 	time.sleep(900)
 
