@@ -20,9 +20,16 @@ def authenticate(access_token,access_token_secret):
 
 
 def follow_back(api):
-	for follower in tweepy.Cursor(api.followers).items():
-		follower.follow()
-		print "Followed {0}".format(follower.name)
+	# return tweepy.Cursor(api.followers).items()
+	ff = api.followers_ids()
+	frnd = api.friends_ids()
+	for i in ff:
+		if i in frnd:
+			print "Already following"
+		else:
+			u = api.get_user(i)
+			u.follow()
+			print "Followed {0}".format(u.name)
 
 
 def retrieve_users():
@@ -39,18 +46,24 @@ def retweet(user_tup,api):
 	latest_tweet = user_tup[1]
 	user = api.get_user(user_name)
 	new_tweets = user.timeline(since_id=latest_tweet)
+	new_tweets = new_tweets[::-1]
+	failed = False
 	if new_tweets:
-		latest_tweet = new_tweets[0].id
-		with conn:
-			t = (latest_tweet,user_name)
-			cur = conn.cursor()
-			cur.execute("UPDATE USERS SET latest_tweet=? WHERE user_name=?",t)
-	for i in new_tweets:
-		try:
-			api.retweet(i.id)
-			print "ReTweeting.."
-		except:
-			print "RT Failed :("
+		for i in new_tweets:
+			try:
+				api.retweet(i.id)
+				print "ReTweeting.."
+			except:
+				if not failed:
+					latest_tweet = new_tweets[0].id
+					with conn:
+						t = (latest_tweet,user_name)
+						cur = conn.cursor()
+						cur.execute("UPDATE USERS SET latest_tweet=? WHERE user_name=?",t)
+					failed = True
+
+				print "RT Failed :("
+
 
 def getapis():
 	with conn:
@@ -65,25 +78,23 @@ def getapis():
 
 def main_procedure(api):
 	try:
-		follow_back(api)
-	except 	Exception,e:
-		print e
-	try:
 		users = retrieve_users()
 	except Exception,e:
-		print e
+		pass
 	if users:
 		for i in users:
 			try:
 				retweet(i,api)
 			except Exception,e:
-				print e
+				pass
+	try:
+		follow_back(api)
+	except 	Exception,e:
+		pass
 
 while True:
 	apis = getapis()
 	for api in apis:
 		main_procedure(api)
-	print "Now Sleeping...."
-	time.sleep(900)
 
 

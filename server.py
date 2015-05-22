@@ -41,7 +41,8 @@ def adduser(screen_name,api):
 			t = (screen_name,latest_tweet)
 			cur.execute("INSERT INTO USERS(user_name,latest_tweet) VALUES (?,?);",t)
 			return	"User Added ;)"
-	except tweepy.error.TweepError:
+	except tweepy.error.TweepError,e:
+		print e
 		return "Incorrect username!!!"
 
 
@@ -73,9 +74,12 @@ class AddUser(tornado.web.RequestHandler):
 				row = cur.fetchone()
 		except:
 			self.write("No Account Added :(")
-		api = authenticate(row[0],row[1])
-		user_name = self.get_query_argument('user_name')
-		self.write(adduser(user_name,api))
+		if row != None:
+			api = authenticate(row[0],row[1])
+			user_name = self.get_query_argument('user_name')
+			self.write(adduser(user_name,api))
+		else:
+			self.write("No Account Added :(")
 		self.write(''' <a href="/">Back</a>''')
 
 
@@ -91,7 +95,7 @@ class AddAccount(tornado.web.RequestHandler):
 class AccountFinal(tornado.web.RequestHandler):
 
 	def get(self):
-		auth = tweepy.OAuthHandler(consumer_key, consumer_secret,callback_url)
+		auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
 		verifier = self.get_argument('oauth_verifier')
 		try:
 			# with conn:
@@ -134,7 +138,7 @@ class ListUsers(tornado.web.RequestHandler):
 			self.write("USER NAME         latest_tweet<br>")
 			self.write("<br>")
 			for i in rows:
-				self.write("{0}         {1}<br>".format(i[1],i[2]))
+				self.write('''{0}         {1}    <a href="/removeuser?uid={2}">Remove</a><br>'''.format(i[1],i[2],i[0]))
 		self.write(''' <a href="/">Back</a>''')
 
 
@@ -150,6 +154,19 @@ class ListAccounts(tornado.web.RequestHandler):
 				self.write(i[0])
 		self.write(''' <a href="/">Back</a>''')
 
+class RemoveUser(tornado.web.RequestHandler):
+
+	def get(self):
+		uid = self.get_query_argument('uid')
+		try:
+			with conn:
+				t = (uid,)
+				cur = conn.cursor()
+				cur.execute("DELETE FROM USERS WHERE id=?",t)
+		except:
+			self.write("Unable to delete user :(")
+		self.write(''' <a href="/">Back</a>''')
+
 
 
 application = tornado.web.Application([
@@ -159,10 +176,11 @@ application = tornado.web.Application([
 	(r'/listacc',ListAccounts),
 	(r'/add',AddAccount),
 	(r'/addfinal',AccountFinal),
+	(r'/removeuser',RemoveUser),
 	])
 
 print "Server Running..."
 
 if __name__ == "__main__":
-    application.listen(8888)
+    application.listen(80)
     tornado.ioloop.IOLoop.instance().start()
